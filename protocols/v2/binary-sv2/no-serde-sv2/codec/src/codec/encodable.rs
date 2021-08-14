@@ -15,6 +15,8 @@ pub trait Encodable {
 }
 
 //
+// CCDLE12 BEACON: Implements Encodable for anytype that can be converted Into
+// a EncodableField
 impl<'a, T: Into<EncodableField<'a>>> Encodable for T {
     #[allow(clippy::wrong_self_convention)]
     fn to_bytes(self, dst: &mut [u8]) -> Result<usize, Error> {

@@ -33,11 +33,18 @@ pub use datatypes::{
     U256,
 };
 
+// TODO: CCDLE12 BEACON
+// Imports all the serialization traits for SV2 serialization of types
 pub use crate::codec::decodable::Decodable;
 pub use crate::codec::encodable::{Encodable, EncodableField};
 pub use crate::codec::GetSize;
 pub use crate::codec::SizeHint;
 
+// NOTE: CCDLE12 LEARNING BEACON
+// The clippy `wrong_self_convetion` is used to catch incorrect naming when borrowing/getting
+// `self`, this case just allows it
+/// A helper function that will convert a T that implements the codec Encodable and GetSize and
+/// returns a serialized from of the T.
 #[allow(clippy::wrong_self_convention)]
 pub fn to_bytes<T: Encodable + GetSize>(src: T) -> Result<Vec<u8>, Error> {
     let mut result = vec![0_u8; src.get_size()];
@@ -45,6 +52,8 @@ pub fn to_bytes<T: Encodable + GetSize>(src: T) -> Result<Vec<u8>, Error> {
     Ok(result)
 }
 
+// NOTE: CCDLE12 BEACON
+/// Writes the bytes of an Encodable T to a destination writer, in this cause a mutable slice of byte
 #[allow(clippy::wrong_self_convention)]
 pub fn to_writer<T: Encodable>(src: T, dst: &mut [u8]) -> Result<(), Error> {
     src.to_bytes(dst)?;

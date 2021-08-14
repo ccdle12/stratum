@@ -366,15 +366,15 @@ impl<'a, W: Write> ser::SerializeStructVariant for &'a mut Serializer<W> {
 
 ///// TEST /////
 
-#[test]
-fn test_struct() {
-    #[derive(Serialize)]
-    struct Test {
-        a: u32,
-        b: u8,
-    }
+// #[test]
+// fn test_struct() {
+    // #[derive(Serialize)]
+    // struct Test {
+        // a: u32,
+        // b: u8,
+    // }
 
-    let test = Test { a: 456, b: 9 };
-    let expected = vec![200, 1, 0, 0, 9];
-    assert_eq!(to_bytes(&test).unwrap(), expected);
-}
+    // let test = Test { a: 456, b: 9 };
+    // let expected = vec![200, 1, 0, 0, 9];
+    // assert_eq!(to_bytes(&test).unwrap(), expected);
+// }

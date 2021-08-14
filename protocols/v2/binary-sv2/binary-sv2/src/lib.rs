@@ -14,37 +14,39 @@ pub use derive_codec_sv2::{Decodable as Deserialize, Encodable as Serialize};
 mod test {
     use super::*;
 
-    mod test_bytes {
-        use super::*;
-        use core::convert::TryInto;
+    // mod test_bytes {
+        // use super::*;
+        // use core::convert::TryInto;
 
-        #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
-        struct Test<'decoder> {
-            #[cfg_attr(feature = "with_serde", serde(borrow))]
-            a: Bytes<'decoder>,
-        }
+        // #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+        // struct Test<'decoder> {
+        //     #[cfg_attr(feature = "with_serde", serde(borrow))]
+        //     a: Bytes<'decoder>,
+        // }
 
-        #[test]
-        fn test_struct() {
-            let mut bytes = [98; 890];
-            let a: Bytes = (&mut bytes[..]).try_into().unwrap();
-            let expected = Test { a };
+        // #[test]
+        // fn test_struct() {
+        //     let mut bytes = [98; 890];
+        //     let a: Bytes = (&mut bytes[..]).try_into().unwrap();
+        //     let expected = Test { a };
 
-            #[cfg(not(feature = "with_serde"))]
-            let mut bytes = to_bytes(expected.clone()).unwrap();
-            #[cfg(feature = "with_serde")]
-            let mut bytes = to_bytes(&expected.clone()).unwrap();
+        //     #[cfg(not(feature = "with_serde"))]
+        //     let mut bytes = to_bytes(expected.clone()).unwrap();
+        //     #[cfg(feature = "with_serde")]
+        //     let mut bytes = to_bytes(&expected.clone()).unwrap();
 
-            let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
+        //     let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
 
-            assert_eq!(deserialized, expected);
-        }
-    }
+        //     assert_eq!(deserialized, expected);
+        // }
+    // }
 
     mod test_struct {
         use super::*;
         use core::convert::TryInto;
 
+        /// COMMENTS ON A STRUCT, and some further comments, ipsum blah blah
+        /// ipsum blah blah
         #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
         struct Test {
             a: u32,
@@ -54,6 +56,7 @@ mod test {
 
         #[test]
         fn test_struct() {
+t           println!("test_struct::test_struct::TEST");
             let expected = Test {
                 a: 456,
                 b: 9,
@@ -61,9 +64,13 @@ mod test {
             };
 
             #[cfg(not(feature = "with_serde"))]
-            let mut bytes = to_bytes(expected.clone()).unwrap();
-            #[cfg(feature = "with_serde")]
-            let mut bytes = to_bytes(&expected.clone()).unwrap();
+            // CCDLE12 BEACON: The reason to_bytes and from_bytes can be called
+            // is because Deserialize and Serialize can be callable
+            let mut bytes: Vec<u8> = to_bytes(expected.clone()).unwrap();
+            // #[cfg(feature = "with_serde")]
+            // let mut bytes = to_bytes(&expected.clone()).unwrap();
+            // let another = expected.clone();
+            // another.encodable();
 
             let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
 
@@ -71,35 +78,36 @@ mod test {
         }
     }
 
-    mod test_f32 {
-        use super::*;
-        use core::convert::TryInto;
+    // mod test_f32 {
+        // use super::*;
+        // use core::convert::TryInto;
 
-        #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
-        struct Test {
-            a: u8,
-            b: U24,
-            c: f32,
-        }
+        // #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
+        // struct Test {
+        //     a: u8,
+        //     b: U24,
+        //     c: f32,
+        // }
 
-        #[test]
-        fn test_struct() {
-            let expected = Test {
-                c: 0.345,
-                a: 9,
-                b: 67_u32.try_into().unwrap(),
-            };
+        // #[test]
+        // fn test_struct() {
+        //     println!("test_f32::test_struct::TEST");
+        //     let expected = Test {
+        //         c: 0.345,
+        //         a: 9,
+        //         b: 67_u32.try_into().unwrap(),
+        //     };
 
-            #[cfg(not(feature = "with_serde"))]
-            let mut bytes = to_bytes(expected.clone()).unwrap();
-            #[cfg(feature = "with_serde")]
-            let mut bytes = to_bytes(&expected.clone()).unwrap();
+        //     #[cfg(not(feature = "with_serde"))]
+        //     let mut bytes = to_bytes(expected.clone()).unwrap();
+        //     #[cfg(feature = "with_serde")]
+        //     let mut bytes = to_bytes(&expected.clone()).unwrap();
 
-            let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
+        //     let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
 
-            assert_eq!(deserialized, expected);
-        }
-    }
+        //     assert_eq!(deserialized, expected);
+        // }
+    // }
 
     mod test_str032 {
         use super::*;

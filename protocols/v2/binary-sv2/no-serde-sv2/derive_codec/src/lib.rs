@@ -2,26 +2,44 @@ extern crate proc_macro;
 use core::iter::FromIterator;
 use proc_macro::{Group, TokenStream, TokenTree};
 
+// TODO CCDLE12: BEACON, I think this is where the comments have already been removed
 fn remove_attributes(item: TokenStream) -> TokenStream {
+    // println!("TOKEN STREAM: {:?}", item);
     let stream = item.into_iter();
     let mut is_attribute = false;
     let mut result = Vec::new();
 
     for next in stream {
         match next.clone() {
+            // CCDLE12 BEACON: Capture a derive punctuation, so we can identify this as an
+            // attribute?
             TokenTree::Punct(p) => {
                 if p.to_string() == "#" {
+                    println!("CAPTURED A PUNCT ATTRIBUTE: {:?}", p);
                     is_attribute = true;
                 } else {
+                    // println!("CAPTURED NOT AN ATTRIBUTE: {:?}", p);
                     result.push(next.clone());
                 }
             }
+            // CCDLE12 BEACON: Capture a group of delimiters, but if it's an attribute, we just
+            // skip it?
             TokenTree::Group(g) => {
                 if is_attribute {
+                    println!("Stream: {:?}", g.stream());
+                    println!("GROUP DELIMITED OF ARRTRIBUTE WE ARE IGNORING: {:?}", g.delimiter());
+                    println!("FOUND ATTRIBUTE THAT WE ARE IGNORING: {:?}\n\n", g);
                     continue;
                 } else {
+                    // CCDLE12 BEACON: Get a delimiter?
                     let delimiter = g.delimiter();
+                    // CCDLE12 BEACON: Return a the stream of tokens between the delimiter when
+                    // calling g.stream() but then recurisvely call remove_attributes, to remove
+                    // attributes??? what?
                     let cleaned_group = remove_attributes(g.stream());
+
+                    // CCDLE12: Create a group using the delimiter and cleaned_group?
+                    // TODO: What are the "attributes" we are trying to remove??
                     let cleaned_group = TokenTree::Group(Group::new(delimiter, cleaned_group));
                     result.push(cleaned_group);
                 }
@@ -32,6 +50,7 @@ fn remove_attributes(item: TokenStream) -> TokenStream {
             }
         }
     }
+    // println!("RESULT STREAM: {:?}", result);
 
     TokenStream::from_iter(result)
 }
@@ -141,6 +160,8 @@ impl ParsedField {
     }
 }
 
+// CCDLE12 BEACON: This is an intermediate representation of the TokenStream similar
+// to the DeriveInput struct
 #[derive(Clone, Debug)]
 struct ParsedStruct {
     pub name: String,
@@ -160,6 +181,10 @@ struct ParsedStruct {
 
 fn get_struct_properties(item: TokenStream) -> ParsedStruct {
     let item = remove_attributes(item);
+
+    // NOTE BEACON: It's at this point that the comments should be removed
+    // using remove_attributes().
+    println!("TOKEN STREAM: {:?}\n\n", item);
     let mut stream = item.into_iter();
 
     // Check if the stream is a struct
@@ -293,20 +318,27 @@ pub fn decodable(item: TokenStream) -> TokenStream {
         derive_fields,
         derive_decoded_fields,
     );
-    //println!("{}", result);
+    // println!("{}", result);
 
     result.parse().unwrap()
 }
 
+// CCDLE12 BEACON: This is the derive function implementation for the Encodable trait.
+// This should be able to encode a StratumV2 struct into an EncodableField???
 #[proc_macro_derive(Encodable)]
 pub fn encodable(item: TokenStream) -> TokenStream {
+    // println!("DEBUG IS THIS CALLED?!?!?!");
+    // println!("TOKEN STREAM: {:?}", item);
     let parsed_struct = get_struct_properties(item);
+    // println!("PARSED STRUCT: {:?}", parsed_struct);
     let fields = parsed_struct.fields.clone();
+    // println!("PARSED FIELDS: {:?}", fields);
 
     let mut field_into_decoded_field = String::new();
 
     // Create DecodableField from fields
     for f in fields.clone() {
+        println!("FIELDS: {:?}", f);
         let field = format!(
             "
             let val = v.{};

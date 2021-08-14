@@ -2,6 +2,7 @@ use crate::codec::decodable::{
     Decodable, DecodableField, DecodablePrimitive, FieldMarker, GetMarker, PrimitiveMarker,
 };
 use crate::codec::encodable::{EncodableField, EncodablePrimitive};
+// NOTE: CCDLE12 - predefined data types here
 use crate::datatypes::*;
 use crate::Error;
 use alloc::vec::Vec;

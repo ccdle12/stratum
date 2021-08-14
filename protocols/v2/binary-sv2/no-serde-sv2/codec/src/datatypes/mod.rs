@@ -13,6 +13,7 @@ pub use non_copy_data_types::{
 #[cfg(not(feature = "no_std"))]
 use std::io::{Error as E, Read, Write};
 
+// TODO BEACON: Sv2DataType is the main trait used to de/serialize a type?
 pub trait Sv2DataType<'a>: Sized + SizeHint + GetSize + Into<FieldMarker> {
     fn from_bytes_(data: &'a mut [u8]) -> Result<Self, Error> {
         Self::size_hint(data, 0)?;

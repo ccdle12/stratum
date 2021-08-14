@@ -504,28 +504,28 @@ impl<'de, 'a> SeqAccess<'de> for Struct<'de, 'a> {
 
 ///// TEST /////
 
-#[test]
-fn test_struct() {
-    use serde::Serialize;
+// #[test]
+// fn test_struct() {
+//     use serde::Serialize;
 
-    #[derive(Deserialize, Serialize, PartialEq, Debug)]
-    struct Test {
-        a: u32,
-        b: u8,
-        c: crate::primitives::U24,
-    }
+//     #[derive(Deserialize, Serialize, PartialEq, Debug)]
+//     struct Test {
+//         a: u32,
+//         b: u8,
+//         c: crate::primitives::U24,
+//     }
 
-    let expected = Test {
-        a: 456,
-        b: 9,
-        c: 67_u32.try_into().unwrap(),
-    };
+//     let expected = Test {
+//         a: 456,
+//         b: 9,
+//         c: 67_u32.try_into().unwrap(),
+//     };
 
-    let mut bytes = crate::ser::to_bytes(&expected).unwrap();
-    let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
+//     let mut bytes = crate::ser::to_bytes(&expected).unwrap();
+//     let deserialized: Test = from_bytes(&mut bytes[..]).unwrap();
 
-    assert_eq!(deserialized, expected);
-}
+//     assert_eq!(deserialized, expected);
+// }
 
 #[test]
 fn test_b0255() {
