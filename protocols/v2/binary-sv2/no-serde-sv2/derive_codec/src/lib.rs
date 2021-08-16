@@ -301,12 +301,10 @@ pub fn decodable(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Encodable)]
 pub fn encodable(item: TokenStream) -> TokenStream {
     let parsed_struct = get_struct_properties(item);
-    let fields = parsed_struct.fields.clone();
-
     let mut field_into_decoded_field = String::new();
 
     // Create DecodableField from fields
-    for f in fields.clone() {
+    for f in &parsed_struct.fields {
         let field = format!(
             "
             let val = v.{};
@@ -319,7 +317,7 @@ pub fn encodable(item: TokenStream) -> TokenStream {
 
     let mut sizes = String::new();
 
-    for f in fields {
+    for f in &parsed_struct.fields {
         let field = format!(
             "
             size += self.{}.get_size();
