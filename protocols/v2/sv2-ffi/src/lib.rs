@@ -623,7 +623,46 @@ mod tests {
         let _res = next_frame(&mut decoder_wrapper);
     }
 
-    // RR
+    // An internal test macro that will generate the default encoding and decoding
+    // assertions for an Arbitrary implementation of a Sv2Message.
+    macro_rules! impl_prop_encoding_test {
+        ($test_name:ident, $random_msg:ident, $standard_msg:ident, $msg_byte:expr) => {
+            #[quickcheck_macros::quickcheck]
+            fn $test_name(message: $random_msg) -> bool {
+                let expected = message.clone().0;
+
+                let mut encoder = Encoder::<$standard_msg>::new();
+                let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
+
+                let frame = StandardSv2Frame::from_message(message.0, $msg_byte, 0).unwrap();
+
+                let encoded_frame = encoder.encode(frame).unwrap();
+
+                let buffer = decoder.writable();
+                for i in 0..buffer.len() {
+                    buffer[i] = encoded_frame[i]
+                }
+                let _ = decoder.next_frame();
+
+                let buffer = decoder.writable();
+                for i in 0..buffer.len() {
+                    buffer[i] = encoded_frame[i + 6]
+                }
+
+                let mut decoded = decoder.next_frame().unwrap();
+
+                let msg_type = decoded.get_header().unwrap().msg_type();
+                let payload = decoded.payload();
+                let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
+                let decoded_message = match decoded_message {
+                    Sv2Message::$standard_msg(m) => m,
+                    _ => panic!(),
+                };
+
+                decoded_message == expected
+            }
+        };
+    }
 
     #[quickcheck_macros::quickcheck]
     fn encode_with_c_coinbase_output_data_size(message: RandomCoinbaseOutputDataSize) -> bool {
