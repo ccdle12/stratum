@@ -383,15 +383,6 @@ mod tests {
     use quickcheck::{Arbitrary, Gen};
     use quickcheck_macros;
 
-    #[derive(Clone, Debug)]
-    pub struct RandomCoinbaseOutputDataSize(pub CoinbaseOutputDataSize);
-
-    impl Arbitrary for RandomCoinbaseOutputDataSize {
-        fn arbitrary(g: &mut Gen) -> Self {
-            RandomCoinbaseOutputDataSize(CoinbaseOutputDataSize::from_random(g))
-        }
-    }
-
     fn get_setup_connection() -> SetupConnection<'static> {
         get_setup_connection_w_params(
             common_messages_sv2::Protocol::TemplateDistributionProtocol,
@@ -623,43 +614,69 @@ mod tests {
         let _res = next_frame(&mut decoder_wrapper);
     }
 
-    // RR
+    // An internal test macro that will generate the default encoding and decoding
+    // assertions for an Arbitrary implementation of a Sv2Message.
+    macro_rules! impl_prop_encoding_test {
+        ($test_name:ident, $random_msg:ident, $standard_msg:ident, $msg_byte:expr) => {
+            #[quickcheck_macros::quickcheck]
+            fn $test_name(
+                message: $random_msg,
+            ) -> bool {
+                let expected = message.clone().0;
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_coinbase_output_data_size(message: RandomCoinbaseOutputDataSize) -> bool {
-        let expected = message.clone().0;
+                let mut encoder = Encoder::<$standard_msg>::new();
+                let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
 
-        let mut encoder = Encoder::<CoinbaseOutputDataSize>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_COINBASE_OUTPUT_DATA_SIZE, 0)
+                let frame = StandardSv2Frame::from_message(
+                    message.0,
+                    $msg_byte,
+                    0,
+                )
                 .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
 
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
+                let encoded_frame = encoder.encode(frame).unwrap();
+
+                let buffer = decoder.writable();
+                for i in 0..buffer.len() {
+                    buffer[i] = encoded_frame[i]
+                }
+                let _ = decoder.next_frame();
+
+                let buffer = decoder.writable();
+                for i in 0..buffer.len() {
+                    buffer[i] = encoded_frame[i + 6]
+                }
+
+                let mut decoded = decoder.next_frame().unwrap();
+
+                let msg_type = decoded.get_header().unwrap().msg_type();
+                let payload = decoded.payload();
+                let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
+                let decoded_message = match decoded_message {
+                    Sv2Message::$standard_msg(m) => m,
+                    _ => panic!(),
+                };
+
+                decoded_message == expected
+            }
         }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::CoinbaseOutputDataSize(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
     }
+
+    #[derive(Clone, Debug)]
+    pub struct RandomCoinbaseOutputDataSize(pub CoinbaseOutputDataSize);
+
+    impl Arbitrary for RandomCoinbaseOutputDataSize {
+        fn arbitrary(g: &mut Gen) -> Self {
+            RandomCoinbaseOutputDataSize(CoinbaseOutputDataSize::from_random(g))
+        }
+    }
+
+    impl_prop_encoding_test!(
+        encode_with_c_coinbase_output_data_size,
+        RandomCoinbaseOutputDataSize,
+        CoinbaseOutputDataSize,
+        MESSAGE_TYPE_COINBASE_OUTPUT_DATA_SIZE
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomNewTemplate(pub NewTemplate<'static>);
@@ -669,49 +686,12 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_new_template_id(message: RandomNewTemplate) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<NewTemplate>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        // Create frame
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_NEW_TEMPLATE, 0).unwrap();
-        // Encode frame
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        // Decode encoded frame
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        // Puts decoder in the next state (next 6 bytes). If frame is incomplete, returns an error
-        // prompting to add more bytes to decode the frame
-        // Required between two writes because of how this is intended to use the decoder in a loop
-        // read from a stream.
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        // Decoded frame, complete frame is filled
-        let mut decoded = decoder.next_frame().unwrap();
-
-        // Extract payload of the frame which is the NewTemplate message
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::NewTemplate(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_new_template_id,
+        RandomNewTemplate,
+        NewTemplate,
+        MESSAGE_TYPE_NEW_TEMPLATE
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomRequestTransactionData(pub RequestTransactionData);
@@ -721,41 +701,12 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_request_transaction_data(message: RandomRequestTransactionData) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<RequestTransactionData>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_REQUEST_TRANSACTION_DATA, 0)
-                .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::RequestTransactionData(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_request_transaction_data,
+        RandomRequestTransactionData,
+        RequestTransactionData,
+        MESSAGE_TYPE_REQUEST_TRANSACTION_DATA
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomRequestTransactionDataError(pub RequestTransactionDataError<'static>);
@@ -765,46 +716,13 @@ mod tests {
             RandomRequestTransactionDataError(RequestTransactionDataError::from_random(g))
         }
     }
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_request_transaction_data_error(
-        message: RandomRequestTransactionDataError,
-    ) -> bool {
-        let expected = message.clone().0;
 
-        let mut encoder = Encoder::<RequestTransactionDataError>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame = StandardSv2Frame::from_message(
-            message.0,
-            MESSAGE_TYPE_REQUEST_TRANSACTION_DATA_ERROR,
-            0,
-        )
-        .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::RequestTransactionDataError(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_request_transaction_data_error,
+        RandomRequestTransactionDataError,
+        RequestTransactionDataError,
+        MESSAGE_TYPE_REQUEST_TRANSACTION_DATA_ERROR
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomRequestTransactionDataSuccess(pub RequestTransactionDataSuccess<'static>);
@@ -814,46 +732,13 @@ mod tests {
             RandomRequestTransactionDataSuccess(RequestTransactionDataSuccess::from_random(g))
         }
     }
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_request_transaction_data_success(
-        message: RandomRequestTransactionDataSuccess,
-    ) -> bool {
-        let expected = message.clone().0;
 
-        let mut encoder = Encoder::<RequestTransactionDataSuccess>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame = StandardSv2Frame::from_message(
-            message.0,
-            MESSAGE_TYPE_REQUEST_TRANSACTION_DATA_SUCCESS,
-            0,
-        )
-        .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::RequestTransactionDataSuccess(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_request_transaction_data_success,
+        RandomRequestTransactionDataSuccess,
+        RequestTransactionDataSuccess,
+        MESSAGE_TYPE_REQUEST_TRANSACTION_DATA_SUCCESS
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomSetNewPrevHash(pub SetNewPrevHash<'static>);
@@ -864,40 +749,12 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_set_new_prev_hash(message: RandomSetNewPrevHash) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<SetNewPrevHash>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_SET_NEW_PREV_HASH, 0).unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::SetNewPrevHash(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_set_new_prev_hash,
+        RandomSetNewPrevHash,
+        SetNewPrevHash,
+        MESSAGE_TYPE_SET_NEW_PREV_HASH
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomSubmitSolution(pub SubmitSolution<'static>);
@@ -908,40 +765,12 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_submit_solution(message: RandomSubmitSolution) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<SubmitSolution>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_SUBMIT_SOLUTION, 0).unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::SubmitSolution(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_submit_solution,
+        RandomSubmitSolution,
+        SubmitSolution,
+        MESSAGE_TYPE_SUBMIT_SOLUTION
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomSetupConnection(pub SetupConnection<'static>);
@@ -961,76 +790,19 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_channel_endpoint_changed(message: RandomChannelEndpointChanged) -> bool {
-        let expected = message.clone().0;
+    impl_prop_encoding_test!(
+        encode_with_c_channel_endpoint_changed,
+        RandomChannelEndpointChanged,
+        ChannelEndpointChanged,
+        MESSAGE_TYPE_CHANNEL_ENDPOINT_CHANGES
+    );
 
-        let mut encoder = Encoder::<ChannelEndpointChanged>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_CHANNEL_ENDPOINT_CHANGES, 0)
-                .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::ChannelEndpointChanged(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
-
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_setup_connection(message: RandomSetupConnection) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<SetupConnection>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_SETUP_CONNECTION, 0).unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::SetupConnection(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message == expected
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_setup_connection,
+        RandomSetupConnection,
+        SetupConnection,
+        MESSAGE_TYPE_SETUP_CONNECTION
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomSetupConnectionError(pub SetupConnectionError<'static>);
@@ -1041,41 +813,12 @@ mod tests {
         }
     }
 
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_setup_connection_error(message: RandomSetupConnectionError) -> bool {
-        let expected = message.clone().0;
-
-        let mut encoder = Encoder::<SetupConnectionError>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_SETUP_CONNECTION_ERROR, 0)
-                .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::SetupConnectionError(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message.flags == expected.flags
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_setup_connection_error,
+        RandomSetupConnectionError,
+        SetupConnectionError,
+        MESSAGE_TYPE_SETUP_CONNECTION_ERROR
+    );
 
     #[derive(Clone, Debug)]
     pub struct RandomSetupConnectionSuccess(pub SetupConnectionSuccess);
@@ -1086,39 +829,11 @@ mod tests {
             RandomSetupConnectionSuccess(SetupConnectionSuccess::from_random(g))
         }
     }
-    #[quickcheck_macros::quickcheck]
-    fn encode_with_c_setup_connection_success(message: RandomSetupConnectionSuccess) -> bool {
-        let expected = message.clone().0;
 
-        let mut encoder = Encoder::<SetupConnectionSuccess>::new();
-        let mut decoder = StandardDecoder::<Sv2Message<'static>>::new();
-
-        let frame =
-            StandardSv2Frame::from_message(message.0, MESSAGE_TYPE_SETUP_CONNECTION_SUCCESS, 0)
-                .unwrap();
-        let encoded_frame = encoder.encode(frame).unwrap();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i]
-        }
-        let _ = decoder.next_frame();
-
-        let buffer = decoder.writable();
-        for i in 0..buffer.len() {
-            buffer[i] = encoded_frame[i + 6]
-        }
-
-        let mut decoded = decoder.next_frame().unwrap();
-
-        let msg_type = decoded.get_header().unwrap().msg_type();
-        let payload = decoded.payload();
-        let decoded_message: Sv2Message = (msg_type, payload).try_into().unwrap();
-        let decoded_message = match decoded_message {
-            Sv2Message::SetupConnectionSuccess(m) => m,
-            _ => panic!(),
-        };
-
-        decoded_message.flags == expected.flags
-    }
+    impl_prop_encoding_test!(
+        encode_with_c_setup_connection_success,
+        RandomSetupConnectionSuccess,
+        SetupConnectionSuccess,
+        MESSAGE_TYPE_SETUP_CONNECTION_SUCCESS
+    );
 }
