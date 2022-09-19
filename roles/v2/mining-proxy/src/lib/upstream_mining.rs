@@ -257,11 +257,15 @@ impl UpstreamMiningNode {
     }
 
     pub async fn next(self_mutex: Arc<Mutex<Self>>, mut incoming: StdFrame) {
+        println!("------------------------- !!! START !!!!");
         let message_type = incoming.get_header().unwrap().msg_type();
+        println!("    CCDLE12 DEBUG next(): Received message_type: {:?}", &message_type);
         let payload = incoming.payload();
+        println!("    CCDLE12 DEBUG next(): Received payload: {:?}", &payload);
 
         let routing_logic = MiningRoutingLogic::Proxy(crate::get_routing_logic().await);
 
+        println!("    CCDLE12 DEBUG: Is this where handle_message_mining() gets called?");
         let next_message_to_send = UpstreamMiningNode::handle_message_mining(
             self_mutex.clone(),
             message_type,
@@ -639,6 +643,7 @@ impl
 
         match dispacther {
             JobDispatcher::Group(d) => {
+                println!("    CCDLE12 DEBUG: This is where on_new_extended_mining_job_pre() is being called");
                 d.on_new_extended_mining_job_pre(&m);
             }
             JobDispatcher::None => (),
@@ -673,6 +678,8 @@ impl
                 Ok(SendTo::RelaySameMessage(downstreams[0].clone()))
             }
             (false, Some(JobDispatcher::Group(dispatcher))) => {
+                println!("    DEBUG: CCDLE12: BEFORE SUSPECTED OFFENDING ON_NEW_PREV_HASH");
+                println!("    DEBUG: CCDLE12: handle_set_new_prev_hash(): Received SetNewPrevHash in handle_set_new_prev_hash: {}", m.job_id);
                 let mut channel_id_to_job_id = dispatcher.on_new_prev_hash(&m);
                 let downstreams = self
                     .downstream_selector

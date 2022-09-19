@@ -120,6 +120,7 @@ impl GroupChannelJobDispatcher {
 
     pub fn on_new_extended_mining_job_pre(&mut self, extended: &NewExtendedMiningJob) {
         if extended.future_job {
+            println!("    CCDLE12 DEBUG: adding new job to futures, with future job id: {}", &extended.job_id);
             self.future_jobs.insert(extended.job_id, HashMap::new());
             self.extended_id_to_job_id
                 .insert(extended.job_id, HashMap::new());
@@ -165,8 +166,16 @@ impl GroupChannelJobDispatcher {
     }
 
     pub fn on_new_prev_hash(&mut self, message: &SetNewPrevHash) -> HashMap<u32, u32> {
+        // DEBUGGING NOTES: We are getting job_id 38 from here.
+        println!("    CCDLE12 DEBUG: Received a SetNewPrevHash id: {}", &message.job_id);
         let jobs = self.future_jobs.get_mut(&message.job_id).unwrap();
         std::mem::swap(&mut self.jobs, jobs);
+
+        // TODO: Receive message SetNewPrevHash doesn't hav eth job_id, so need to look
+        // at the previous NewTemplate and check id
+        // THEORY: Could be async issues???
+        // let jobs = self.future_jobs.get_mut(&message.job_id);
+        // if jobs.is_none() {}
         self.prev_hash = message.prev_hash.to_vec();
         self.nbits = message.nbits;
         self.future_jobs.clear();
@@ -632,6 +641,7 @@ mod tests {
         let ids = Arc::new(Mutex::new(Id::new()));
         let mut dispatcher = GroupChannelJobDispatcher::new(ids);
 
+        // println!("DEBUG: RACHELS COMMENT ON FAILING on_new_prev_hash()");
         // TODO: fails on self.future_jobs unwrap in the first line of the on_new_prev_hash fn
         let _actual = dispatcher.on_new_prev_hash(&message);
         // let actual_prev_hash: U256<'static> = u256_from_int(tt);

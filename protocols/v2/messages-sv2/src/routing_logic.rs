@@ -240,9 +240,12 @@ impl<
             .downstream_to_upstream_map
             .get(&downstream_mining_data)
             .unwrap();
+
         // TODO the upstream selection logic should be specified by the caller
         let upstream = Self::select_upstreams(&mut upstreams.to_vec());
         let old_id = get_request_id(payload);
+
+        println!("DEBUG: update_id_downstream");
         upstream
             .safe_lock(|u| {
                 let id_map = u.get_mapper();

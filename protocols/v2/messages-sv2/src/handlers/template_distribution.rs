@@ -23,6 +23,7 @@ where
                 self_.safe_lock(|x| x.handle_new_template(m)).unwrap()
             }
             Ok(TemplateDistribution::SetNewPrevHash(m)) => {
+                println!("    DEBUG CCDLE12: handle_message_template_distribution(), calling handle_set_new_prev_hash()");
                 self_.safe_lock(|x| x.handle_set_new_prev_hash(m)).unwrap()
             }
             Ok(TemplateDistribution::RequestTransactionDataSuccess(m)) => self_

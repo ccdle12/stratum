@@ -58,6 +58,7 @@ pub trait ParseDownstreamMiningMessages<
                 )
             })
             .unwrap();
+
         match routing_logic.clone() {
             MiningRoutingLogic::None => (),
             MiningRoutingLogic::Proxy(r_logic) => {
@@ -69,6 +70,7 @@ pub trait ParseDownstreamMiningMessages<
             }
             MiningRoutingLogic::_P(_) => panic!(),
         };
+
         match (message_type, payload).try_into() {
             Ok(Mining::OpenStandardMiningChannel(m)) => {
                 let upstream = match routing_logic {
@@ -330,12 +332,18 @@ pub trait ParseUpstreamMiningMessages<
             },
             Ok(Mining::NewExtendedMiningJob(m)) => match channel_type {
                 ChannelType::Standard => Err(Error::UnexpectedMessage),
-                ChannelType::Extended => self_mutex
+                ChannelType::Extended => {
+                    // println!("CCDLE12 DEBUG: calling handle_new_extended_mining_job()");
+                    self_mutex
                     .safe_lock(|x| x.handle_new_extended_mining_job(m))
-                    .unwrap(),
-                ChannelType::Group => self_mutex
+                    .unwrap()
+                },
+                ChannelType::Group => {
+                    println!("  CCDLE12 DEBUG: calling handle_new_extended_mining_job()");
+                    self_mutex
                     .safe_lock(|x| x.handle_new_extended_mining_job(m))
-                    .unwrap(),
+                    .unwrap()
+                },
                 ChannelType::GroupAndExtended => todo!(),
             },
             Ok(Mining::SetNewPrevHash(m)) => match channel_type {
