@@ -60,8 +60,10 @@ impl PartialJob {
         .unwrap()
         .try_into()
         .unwrap();
+
         let merkle_root = Hash::from_inner(merkle_root);
         let merkle_root = TxMerkleNode::from_hash(merkle_root);
+
         CompleteJob {
             target: self.target,
             nbits,
@@ -102,10 +104,14 @@ impl CompleteJob {
     pub fn get_coinbase(&self) -> B064K<'static> {
         let mut coinbase = Vec::new();
         coinbase.extend(self.coinbase_tx_prefix.clone());
+        println!("CCDLE12 DEBUG: @ coinbase_tx_prefix: {:?}", self.coinbase_tx_prefix);
         coinbase.extend(self.extranonce.clone());
+        println!("CCDLE12 DEBUG: extranonce: {:?}", self.extranonce);
         coinbase.extend(self.coinbase_tx_suffix.clone());
+        println!("CCDLE12 DEBUG: coinbase_tx_suffix: {:?}", self.coinbase_tx_suffix);
         coinbase.try_into().unwrap()
     }
+
     pub fn validate_target(
         &mut self,
         nonce: u32,
@@ -113,12 +119,21 @@ impl CompleteJob {
         ntime: u32,
         extranonce_suffix: Option<&[u8]>,
     ) -> VelideateTargetResult {
+
+        // TODO: Is this merkle root creating an incorrect witness merkle root?
+        // TODO: Maybe it should be applying it as a coinbase out?
+        println!("CCDLE12 DEBUG: [mining_pool/mod.rs::validate_target()] called");
         let merkle_root = match extranonce_suffix {
-            None => self.merkle_root,
+            None => {
+                println!("CCDLE12 DEBUG: extranonce_suffix is NONE: so returning merkle root");
+                self.merkle_root
+            },
             Some(suffix) => {
+                println!("CCDLE12 DEBUG: extranonce_suffix is SOME: so trying to calculate a new merkle root: {:?}", self.coinbase_tx_suffix);
                 let mid_point = self.extranonce.len() - suffix.len();
                 let extranonce = [&self.extranonce[0..mid_point], suffix].concat();
                 assert!(self.extranonce.len() == 32);
+
                 let merkle_root: [u8; 32] = merkle_root_from_path(
                     &(self.coinbase_tx_prefix[..]),
                     &(self.coinbase_tx_suffix[..]),
@@ -128,10 +143,13 @@ impl CompleteJob {
                 .unwrap()
                 .try_into()
                 .unwrap();
+
                 let merkle_root = Hash::from_inner(merkle_root);
+                println!("CCLDE12 DEBUG: calculated merkle_root: {:?}", merkle_root);
                 TxMerkleNode::from_hash(merkle_root)
             }
         };
+
         // TODO  how should version be transoformed from u32 into i32???
         let version = version as i32;
         let header = BlockHeader {
@@ -158,6 +176,8 @@ impl CompleteJob {
                 header_nonce: nonce,
                 coinbase_tx: self.get_coinbase(),
             };
+            println!("CCDLE12 DEBUG: SENDING THIS SUBMIT SOLUTION: {:?}", &solution);
+            println!("!!!! serialized coinbastx: {:?}", &solution.coinbase_tx);
             VelideateTargetResult::LessThanBitcoinTarget(hash_, self.new_shares_sum, solution)
         } else if hash <= self.target {
             self.new_shares_sum += 1;
@@ -524,6 +544,7 @@ impl Downstream {
         _merkle_path: Vec<Vec<u8>>,
         template_id: u64,
     ) -> Result<(), ()> {
+        println!("CCDLE12 DEBUG [mining_pool/mod.rs::on_new_extended_job]");
         if !message.future_job {
             self_
                 .safe_lock(|s| {
@@ -567,21 +588,26 @@ impl IsMiningDownstream for Downstream {}
 impl Pool {
     async fn accept_incoming_connection(self_: Arc<Mutex<Pool>>, config: Configuration) {
         let listner = TcpListener::bind(&config.listen_address).await.unwrap();
+
         while let Ok((stream, _)) = listner.accept().await {
             let solution_sender = self_.safe_lock(|p| p.solution_sender.clone()).unwrap();
+
             let responder = Responder::from_authority_kp(
                 config.authority_public_key.clone().into_inner().as_bytes(),
                 config.authority_secret_key.clone().into_inner().as_bytes(),
                 std::time::Duration::from_secs(config.cert_validity_sec),
             )
             .unwrap();
+
             let last_new_prev_hash = self_.safe_lock(|x| x.last_new_prev_hash.clone()).unwrap();
             let (receiver, sender): (Receiver<EitherFrame>, Sender<EitherFrame>) =
                 Connection::new(stream, HandshakeRole::Responder(responder)).await;
+
             let group_ids = self_.safe_lock(|s| s.group_ids.clone()).unwrap();
             let hom_ids = self_.safe_lock(|s| s.hom_ids.clone()).unwrap();
             let job_creators = self_.safe_lock(|s| s.job_creators.clone()).unwrap();
             let extranonces = self_.safe_lock(|s| s.extranonces.clone()).unwrap();
+
             let downstream = Downstream::new(
                 receiver,
                 sender,
@@ -662,17 +688,22 @@ impl Pool {
 
     async fn on_new_template(self_: Arc<Mutex<Self>>, rx: Receiver<NewTemplate<'_>>) {
         while let Ok(mut new_template) = rx.recv().await {
+            println!("CCDLE12 DEBUG: [mining_pool/mod.rs::on_new_template] received NewTempalte on RX side");
             let job_creators = self_.safe_lock(|s| s.job_creators.clone()).unwrap();
+
             let mut new_jobs = job_creators
                 .safe_lock(|j| j.on_new_template(&mut new_template).unwrap())
                 .unwrap();
+
             let group_downstreams: Vec<Arc<Mutex<Downstream>>> = self_
                 .safe_lock(|s| s.group_downstreams.iter().map(|d| d.1.clone()).collect())
                 .unwrap();
+
             // TODO add standard channel downstream
             for downstream in group_downstreams {
                 let channel_id = downstream.safe_lock(|x| x.id).unwrap();
                 let extended_job = new_jobs.remove(&channel_id).unwrap();
+                println!("CCDLE12 DEBUG: [mining_pool/mod.rs::on_new_template] sending NewTemplate as a new extended_job downstream");
                 Downstream::on_new_extended_job(
                     downstream,
                     extended_job,
@@ -682,6 +713,7 @@ impl Pool {
                 .await
                 .unwrap();
             }
+            println!("CCDLE12 DEBUG: [mining_pool/mod.rs::on_new_template] AFTER group_downstreams loop");
             self_
                 .safe_lock(|s| s.new_template_processed = true)
                 .unwrap();
@@ -698,6 +730,7 @@ impl Pool {
         let range_0 = std::ops::Range { start: 0, end: 0 };
         let range_1 = std::ops::Range { start: 0, end: 16 };
         let range_2 = std::ops::Range { start: 16, end: 32 };
+
         let pool = Arc::new(Mutex::new(Pool {
             group_downstreams: HashMap::new(),
             hom_downstreams: HashMap::new(),
