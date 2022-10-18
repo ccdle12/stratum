@@ -5,7 +5,7 @@ use bitcoin::{
         script::Script,
         transaction::{OutPoint, Transaction, TxIn, TxOut},
     },
-    util::psbt::serialize::Serialize,
+    util::psbt::serialize::{Serialize, Deserialize},
 };
 pub use bitcoin::{
     secp256k1::SecretKey,
@@ -18,6 +18,14 @@ use template_distribution_sv2::{NewTemplate, SetNewPrevHash};
 const SCRIPT_PREFIX_LEN: usize = 4;
 const PREV_OUT_LEN: usize = 38;
 const EXTRANONCE_LEN: usize = 32;
+
+/// An optional flag that is used when a coinbase transaction is committing
+/// work to a block that contains a witness merkle root.
+const SEGWIT_FLAG_LEN: usize = 2;
+
+/// Hardcoded value, used to validate a witness commitment given:
+/// SHA256^2(witness_reserve_value, witness_root);
+const WITNESS_RESERVE_VALUE: [u8; 32] = [0x00; 32];
 
 /// Used by pool one for each group channel
 /// extended and standard channel not supported
@@ -35,10 +43,6 @@ impl JobCreator {
         new_template: &mut NewTemplate,
         coinbase_outputs: &[TxOut],
     ) -> Result<NewExtendedMiningJob<'static>, Error> {
-        assert!(
-            new_template.coinbase_tx_outputs_count == 0,
-            "node provided outputs not supported yet"
-        );
         let script_prefix = new_template.coinbase_prefix.to_vec();
         // Is ok to panic here cause condition will be always true when not in a test chain
         // (regtest ecc ecc)
@@ -85,7 +89,7 @@ impl JobCreator {
         let encoded = coinbase.serialize();
         // add 1 cause the script header (len of script) is 1 byte
         let r = encoded
-            [0..SCRIPT_PREFIX_LEN + coinbase_tx_input_script_prefix_byte_len + PREV_OUT_LEN]
+            [0..SCRIPT_PREFIX_LEN + coinbase_tx_input_script_prefix_byte_len + PREV_OUT_LEN + SEGWIT_FLAG_LEN]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -98,7 +102,7 @@ impl JobCreator {
         let r = encoded[SCRIPT_PREFIX_LEN
             + coinbase_tx_input_script_prefix_byte_len
             + PREV_OUT_LEN
-            + EXTRANONCE_LEN..]
+            + EXTRANONCE_LEN + SEGWIT_FLAG_LEN..]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -118,7 +122,7 @@ impl JobCreator {
             previous_output: OutPoint::null(),
             script_sig: bip34_bytes.into(),
             sequence,
-            witness: vec![],
+            witness: vec![WITNESS_RESERVE_VALUE.to_vec()],
         };
         Transaction {
             version,
@@ -173,6 +177,14 @@ impl JobsCreators {
         if template.coinbase_tx_value_remaining != self.block_reward_staoshi {
             self.block_reward_staoshi = template.coinbase_tx_value_remaining;
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
+        }
+
+        // Push the received witness commitment from the template coinbase_tx_outputs to our outputs since the
+        // received NewTemplate is from a Block that contains segwitoutputs.
+        if template.coinbase_tx_outputs_count > 0 {
+            let witness_commitment = TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()).unwrap();
+            self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
+            self.coinbase_outputs.push(witness_commitment);
         }
 
         let mut new_extended_jobs = HashMap::new();
