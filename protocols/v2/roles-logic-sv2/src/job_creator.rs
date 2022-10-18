@@ -5,7 +5,7 @@ use bitcoin::{
         script::Script,
         transaction::{OutPoint, Transaction, TxIn, TxOut},
     },
-    util::psbt::serialize::Serialize,
+    util::psbt::serialize::{Serialize, Deserialize}
 };
 pub use bitcoin::{
     secp256k1::SecretKey,
@@ -49,6 +49,9 @@ impl JobCreator {
         let bip34_len = script_prefix[1] as usize;
         let bip34_bytes = script_prefix[1..2 + bip34_len].to_vec();
 
+        let tmp_coinbase = Transaction::deserialize(&[2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 34, 1, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 1, 0, 242, 5, 42, 1, 0, 0, 0, 22, 0, 20, 83, 18, 96, 170, 42, 25, 158, 34, 140, 83, 125, 250, 66, 200, 43, 234, 44, 124, 31, 77, 0, 0, 0, 0]).unwrap();
+        println!("COINBASE BYTES COMPLETELY DESERIALIZES");
+
         let coinbase = self.coinbase(
             bip34_bytes,
             new_template
@@ -67,6 +70,7 @@ impl JobCreator {
             version_rolling_allowed: self.version_rolling_allowed,
             merkle_path: new_template.merkle_path.clone().into_static(),
             coinbase_tx_prefix: Self::coinbase_tx_prefix(&coinbase, SCRIPT_PREFIX_LEN)?,
+            // coinbase_tx_prefix: Self::coinbase_tx_prefix(&coinbase, bip34_len+1)?,
             coinbase_tx_suffix: Self::coinbase_tx_suffix(&coinbase, SCRIPT_PREFIX_LEN)?,
         };
         self.template_id_to_job_id
@@ -83,6 +87,7 @@ impl JobCreator {
         coinbase_tx_input_script_prefix_byte_len: usize,
     ) -> Result<B064K<'static>, Error> {
         let encoded = coinbase.serialize();
+        println!("DEBUG: serialized coinbase: {:?}", &encoded);
         // add 1 cause the script header (len of script) is 1 byte
         let r = encoded
             [0..SCRIPT_PREFIX_LEN + coinbase_tx_input_script_prefix_byte_len + PREV_OUT_LEN]

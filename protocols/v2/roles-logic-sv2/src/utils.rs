@@ -70,8 +70,13 @@ pub fn merkle_root_from_path<T: AsRef<[u8]>>(
         Vec::with_capacity(coinbase_tx_prefix.len() + coinbase_tx_suffix.len() + extranonce.len());
     coinbase.extend_from_slice(coinbase_tx_prefix);
     coinbase.extend_from_slice(extranonce);
+    // coinbase.extend_from_slice(&[0x00; 16]);
     coinbase.extend_from_slice(coinbase_tx_suffix);
+    println!("DEBUG: Coinbase bytes that causes failure: {:?}", &coinbase);
+    // TODO: HERE is where None is returned.
+    println!("PANIC AFTER");
     let coinbase = Transaction::deserialize(&coinbase[..]).ok()?;
+    println!("PANIC TRANSACTION DESERIALIZE");
     // below unwrap never panic
     let coinbase_id: [u8; 32] = coinbase.txid().as_hash().to_vec().try_into().unwrap();
     Some(merkle_root_from_path_(coinbase_id, path).to_vec())
@@ -79,6 +84,7 @@ pub fn merkle_root_from_path<T: AsRef<[u8]>>(
 
 // TODO remove when we have https://github.com/rust-bitcoin/rust-bitcoin/issues/1319
 fn merkle_root_from_path_<T: AsRef<[u8]>>(coinbase_id: [u8; 32], path: &[T]) -> [u8; 32] {
+    println!("DEBUG: path.len: {:?}", path.len());
     match path.len() {
         0 => coinbase_id,
         _ => reduce_path(coinbase_id, path),

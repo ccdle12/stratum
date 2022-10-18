@@ -51,15 +51,29 @@ impl PartialJob {
         prev_hash: BlockHash,
         template_id: u64,
     ) -> CompleteJob {
+        println!("BEFORE CALLING merkle_root_from_path()");
+        println!("DEBUG: prefix: {:?}", new_ext_job.coinbase_tx_prefix.to_vec());
+        println!("DEBUG: suffix: {:?}", new_ext_job.coinbase_tx_suffix.to_vec());
+        println!("DEBUG: extranonce: {:?}", &self.extranonce);
+
+        // TMP
+        // self.extranonce.extend_from_slice(&[0x00; 16]);
+        // let mut extranonce_clone = self.extranonce.clone();
+        // extranonce_clone.extend_from_slice(&[0x00; 16]);
+        // println!("DEBUG: extranonce: {:?}", &extranonce_clone[..]);
+        // TMP
+
         let merkle_root: [u8; 32] = merkle_root_from_path(
             &(new_ext_job.coinbase_tx_prefix.to_vec()[..]),
             &(new_ext_job.coinbase_tx_suffix.to_vec()[..]),
             &(self.extranonce[..]),
+            // &(extranonce_clone[..]),
             &(new_ext_job.merkle_path.inner_as_ref()[..]),
         )
         .unwrap()
         .try_into()
         .unwrap();
+
         let merkle_root = Hash::from_inner(merkle_root);
         let merkle_root = TxMerkleNode::from_hash(merkle_root);
         CompleteJob {
@@ -71,6 +85,7 @@ impl PartialJob {
             coinbase_tx_suffix: new_ext_job.coinbase_tx_suffix.to_vec(),
             merkle_path: new_ext_job.merkle_path.to_vec(),
             extranonce: self.extranonce.clone(),
+            // extranonce: extranonce_clone,
             merkle_root,
             template_id,
         }
@@ -116,8 +131,13 @@ impl CompleteJob {
         let merkle_root = match extranonce_suffix {
             None => self.merkle_root,
             Some(suffix) => {
+                println!("DEBUG: self.extranonce.len(): {:?}", &self.extranonce.len());
+                println!("DEBUG: self.suffix.len(): {:?}", &suffix.len());
                 let mid_point = self.extranonce.len() - suffix.len();
+                println!("DEBUG: mid_point index: {:?}", mid_point);
                 let extranonce = [&self.extranonce[0..mid_point], suffix].concat();
+                println!("DEBUG: extranonce: {:?}", &extranonce);
+
                 assert!(self.extranonce.len() == 32);
                 let merkle_root: [u8; 32] = merkle_root_from_path(
                     &(self.coinbase_tx_prefix[..]),
