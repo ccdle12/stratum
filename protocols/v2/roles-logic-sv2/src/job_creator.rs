@@ -5,7 +5,7 @@ use bitcoin::{
         script::Script,
         transaction::{OutPoint, Transaction, TxIn, TxOut},
     },
-    util::psbt::serialize::{Serialize, Deserialize},
+    util::psbt::serialize::{Deserialize, Serialize},
 };
 pub use bitcoin::{
     secp256k1::SecretKey,
@@ -88,8 +88,10 @@ impl JobCreator {
     ) -> Result<B064K<'static>, Error> {
         let encoded = coinbase.serialize();
         // add 1 cause the script header (len of script) is 1 byte
-        let r = encoded
-            [0..SCRIPT_PREFIX_LEN + coinbase_tx_input_script_prefix_byte_len + PREV_OUT_LEN + SEGWIT_FLAG_LEN]
+        let r = encoded[0..SCRIPT_PREFIX_LEN
+            + coinbase_tx_input_script_prefix_byte_len
+            + PREV_OUT_LEN
+            + SEGWIT_FLAG_LEN]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -102,7 +104,8 @@ impl JobCreator {
         let r = encoded[SCRIPT_PREFIX_LEN
             + coinbase_tx_input_script_prefix_byte_len
             + PREV_OUT_LEN
-            + EXTRANONCE_LEN + SEGWIT_FLAG_LEN..]
+            + EXTRANONCE_LEN
+            + SEGWIT_FLAG_LEN..]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -174,6 +177,7 @@ impl JobsCreators {
         &mut self,
         template: &mut NewTemplate,
     ) -> Result<HashMap<u32, NewExtendedMiningJob<'static>>, Error> {
+        // TODO: It's block reward + fees
         if template.coinbase_tx_value_remaining != self.block_reward_staoshi {
             self.block_reward_staoshi = template.coinbase_tx_value_remaining;
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
@@ -182,7 +186,10 @@ impl JobsCreators {
         // Push the received witness commitment from the template coinbase_tx_outputs to our outputs since the
         // received NewTemplate is from a Block that contains segwitoutputs.
         if template.coinbase_tx_outputs_count > 0 {
-            let witness_commitment = TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()).unwrap();
+            // TODO: Maybe for now just access the 0 index?
+            let witness_commitment =
+                TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
+                    .unwrap();
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
             self.coinbase_outputs.push(witness_commitment);
         }
