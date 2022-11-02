@@ -23,7 +23,10 @@ const EXTRANONCE_LEN: usize = 32;
 /// work to a block that contains a witness merkle root.
 const SEGWIT_FLAG_LEN: usize = 2;
 
-/// Hardcoded value, used to validate a witness commitment given:
+/// Hardcoded value if/when a spec change is approved to send this value from the
+/// TemplateProvider: https://github.com/stratum-mining/sv2-spec/pull/15
+///
+/// The WITNESS_RESERVE_VALUE is used to validate a witness commitment given:
 /// SHA256^2(witness_reserve_value, witness_root);
 const WITNESS_RESERVE_VALUE: [u8; 32] = [0x00; 32];
 
@@ -88,10 +91,9 @@ impl JobCreator {
     ) -> Result<B064K<'static>, Error> {
         let encoded = coinbase.serialize();
         // add 1 cause the script header (len of script) is 1 byte
-        let r = encoded[0..SCRIPT_PREFIX_LEN
-            + coinbase_tx_input_script_prefix_byte_len
-            + PREV_OUT_LEN
-            + SEGWIT_FLAG_LEN]
+        let r = encoded
+            [0..SCRIPT_PREFIX_LEN + coinbase_tx_input_script_prefix_byte_len + PREV_OUT_LEN]
+            // + SEGWIT_FLAG_LEN]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -104,8 +106,8 @@ impl JobCreator {
         let r = encoded[SCRIPT_PREFIX_LEN
             + coinbase_tx_input_script_prefix_byte_len
             + PREV_OUT_LEN
-            + EXTRANONCE_LEN
-            + SEGWIT_FLAG_LEN..]
+            + EXTRANONCE_LEN..]
+            // + SEGWIT_FLAG_LEN..]
             .to_vec();
         r.try_into().map_err(Error::BinarySv2Error)
     }
@@ -177,29 +179,21 @@ impl JobsCreators {
         &mut self,
         template: &mut NewTemplate,
     ) -> Result<HashMap<u32, NewExtendedMiningJob<'static>>, Error> {
-        // TODO: It's block reward + fees
+        // TODO: Consider a redesign of this logic, self.block_reward_staoshi
+        // would change frequently since the coinbase_tx_value_remaining is:
+        // block_reward + fees
         if template.coinbase_tx_value_remaining != self.block_reward_staoshi {
             self.block_reward_staoshi = template.coinbase_tx_value_remaining;
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
         }
 
-        // Push the received witness commitment from the template coinbase_tx_outputs to our outputs since the
-        // received NewTemplate is from a Block that contains segwitoutputs.
         if template.coinbase_tx_outputs_count > 0 {
-            // TODO: Maybe for now just access the 0 index?
-            // let witness_commitment =
-            // TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
-            // .unwrap();
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
 
             for output in template.coinbase_tx_outputs.inner_as_ref() {
-                // let witness_commitment =
-                // TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
-                // .unwrap();
                 self.coinbase_outputs
-                    .push(TxOut::deserialize(output.inner_as_ref()).unwrap());
+                    .push(TxOut::deserialize(output.inner_as_ref())?);
             }
-            // self.coinbase_outputs.push(witness_commitment);
         }
 
         let mut new_extended_jobs = HashMap::new();
