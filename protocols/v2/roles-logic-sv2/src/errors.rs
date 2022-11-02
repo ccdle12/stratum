@@ -8,6 +8,7 @@ pub enum Error {
     BadPayloadSize,
     ExpectedLen32(usize),
     BinarySv2Error(BinarySv2Error),
+    BitcoinEncodeError(bitcoin::consensus::encode::Error),
     /// Errors if a `SendTo::RelaySameMessageSv1` request is made on a SV2-only application.
     CannotRelaySv1Message,
     NoGroupsFound,
@@ -34,6 +35,12 @@ impl From<BinarySv2Error> for Error {
     }
 }
 
+impl From<bitcoin::consensus::encode::Error> for Error {
+    fn from(v: bitcoin::consensus::encode::Error) -> Error {
+        Error::BitcoinEncodeError(v)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         use Error::*;
@@ -42,6 +49,11 @@ impl Display for Error {
             BinarySv2Error(v) => write!(
                 f,
                 "BinarySv2Error: error in serializing/deserilizing binary format {:?}",
+                v
+            ),
+            BitcoinEncodeError(v) => write!(
+                f,
+                "BitcoinEncodeError: error calling the Rust Bitcoin encoder: {:?}",
                 v
             ),
             CannotRelaySv1Message => {
