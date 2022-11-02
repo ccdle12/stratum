@@ -187,11 +187,19 @@ impl JobsCreators {
         // received NewTemplate is from a Block that contains segwitoutputs.
         if template.coinbase_tx_outputs_count > 0 {
             // TODO: Maybe for now just access the 0 index?
-            let witness_commitment =
-                TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
-                    .unwrap();
+            // let witness_commitment =
+            // TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
+            // .unwrap();
             self.coinbase_outputs = self.new_outputs(template.coinbase_tx_value_remaining);
-            self.coinbase_outputs.push(witness_commitment);
+
+            for output in template.coinbase_tx_outputs.inner_as_ref() {
+                // let witness_commitment =
+                // TxOut::deserialize(template.coinbase_tx_outputs.inner_as_ref()[0].inner_as_ref())
+                // .unwrap();
+                self.coinbase_outputs
+                    .push(TxOut::deserialize(output.inner_as_ref()).unwrap());
+            }
+            // self.coinbase_outputs.push(witness_commitment);
         }
 
         let mut new_extended_jobs = HashMap::new();

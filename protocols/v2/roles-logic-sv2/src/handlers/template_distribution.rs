@@ -18,9 +18,13 @@ where
         message_type: u8,
         payload: &mut [u8],
     ) -> Result<SendTo, Error> {
+        println!("! handle_message_template_distribution()");
         // Is ok to unwrap a safe_lock result
         match (message_type, payload).try_into() {
             Ok(TemplateDistribution::NewTemplate(m)) => {
+                println!(
+                    "! handle_message_template_distribution(): calling x.handle_new_template()"
+                );
                 self_.safe_lock(|x| x.handle_new_template(m)).unwrap()
             }
             Ok(TemplateDistribution::SetNewPrevHash(m)) => {
@@ -35,7 +39,10 @@ where
             Ok(TemplateDistribution::CoinbaseOutputDataSize(_)) => Err(Error::UnexpectedMessage),
             Ok(TemplateDistribution::RequestTransactionData(_)) => Err(Error::UnexpectedMessage),
             Ok(TemplateDistribution::SubmitSolution(_)) => Err(Error::UnexpectedMessage),
-            Err(e) => Err(e),
+            Err(e) => {
+                println!("! handle_message_template_distribution(): error: {:?}", &e);
+                Err(e)
+            }
         }
     }
     fn handle_new_template(&mut self, m: NewTemplate) -> Result<SendTo, Error>;

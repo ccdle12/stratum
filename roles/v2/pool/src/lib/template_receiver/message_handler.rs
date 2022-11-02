@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 impl ParseServerTemplateDistributionMessages for TemplateRx {
     fn handle_new_template(&mut self, m: NewTemplate) -> Result<SendTo, Error> {
+        println!("BEFORE NewTemplate");
         let new_template = NewTemplate {
             template_id: m.template_id,
             future_template: m.future_template,

@@ -65,6 +65,11 @@ impl TemplateRx {
             let mut message_from_tp: StdFrame = message_from_tp.try_into().unwrap();
             let message_type = message_from_tp.get_header().unwrap().msg_type();
             let payload = message_from_tp.payload();
+            println!("HERE");
+            if message_type == 0x71 {
+                println!("DEBUG: RECEIVED NEWTEMPLATE PAYLOAD: {:?}", &payload);
+            }
+
             match ParseServerTemplateDistributionMessages::handle_message_template_distribution(
                 self_.clone(),
                 message_type,
