@@ -264,12 +264,14 @@ impl UpstreamMiningNode {
                 .safe_lock(|s| s.recv_coinbase_out.clone())
                 .unwrap()
                 .unwrap();
+
             while !self_mutex
                 .safe_lock(|s| s.channel_kind.has_factory())
                 .unwrap()
             {
                 tokio::task::yield_now().await;
             }
+
             while let Ok((outs, _id)) = recv.recv().await {
                 // TODO assuming that only one coinbase is negotiated with the pool not handling
                 // different tokens, in order to do that we can use the out hashmap:
@@ -286,22 +288,39 @@ impl UpstreamMiningNode {
                     })
                     .unwrap();
             }
+
         });
     }
 
+    // TODO: So this is an async task that runs in a loop, and  responds to receiving
+    // new templates by creating a SetCustomMiningJob and sending it upstream.
     pub fn start_receiving_new_template(self_mutex: Arc<Mutex<Self>>) {
         task::spawn(async move {
             Self::wait_for_channel_factory(self_mutex.clone()).await;
+
             let new_template_reciver = self_mutex
                 .safe_lock(|a| a.recv_tp.clone())
                 .unwrap()
                 .unwrap();
-            while !self_mutex.safe_lock(|s| s.first_ph_received).unwrap() {
-                tokio::task::yield_now().await;
-            }
+
+            // TODO: 2023.04.03 - Delete me afterwards. Maybe just set first_ph_received to true?
+            // TMP CODE:
+            // TODO! THIS IS IT, THIS IS THE CODE THAT FIXES IT ALL
+            // self_mutex.safe_lock(|s| s.first_ph_received = true).unwrap();
+            //
+            // while !self_mutex.safe_lock(|s| s.first_ph_received).unwrap() {
+                // TODO: 2023.03.03 - This gets stuck here and is part of the weird bug for
+                // incorrect ordering of messages received in job_creator.on_new_template()
+                // info!("\n\n%%%%%%%%%%%%% before new_template_receiver");
+                // tokio::task::yield_now().await;
+            // }
+
             loop {
                 let (mut message_new_template, token): (NewTemplate, u64) =
                     new_template_reciver.recv().await.unwrap();
+                info!("CCDLE12: [upstream_mining] received a message_new_template: {:?}", message_new_template);
+
+                // TODO: Seems like this is where they receive a custom_job
                 let (channel_id_to_new_job_msg, custom_job) = self_mutex
                     .safe_lock(|a| {
                         a.channel_kind
@@ -310,10 +329,13 @@ impl UpstreamMiningNode {
                     })
                     .unwrap()
                     .unwrap();
+
+                info!("\n\nCCDLE12: [upstream_mining] CUSTOM MINING JOB: is some: {}\n\n", custom_job.is_some());
                 if let Some(custom_job) = custom_job {
                     let req_id = self_mutex
                         .safe_lock(|s| s.request_ids.safe_lock(|r| r.next()).unwrap())
                         .unwrap();
+
                     let custom_mining_job =
                         PoolMessages::Mining(Mining::SetCustomMiningJob(SetCustomMiningJob {
                             channel_id: self_mutex.safe_lock(|s| s.id).unwrap(),
@@ -333,6 +355,8 @@ impl UpstreamMiningNode {
                             future_job: message_new_template.future_template,
                             token,
                         }));
+
+                info!("\n\n!!!!!!!!!!!!!!!!!!!! CUSTOM MINING JOB: is some and about to send custom mining job upstream\n\n",);
                     Self::send(self_mutex.clone(), custom_mining_job.try_into().unwrap())
                         .await
                         .unwrap();
@@ -343,11 +367,14 @@ impl UpstreamMiningNode {
                         .safe_lock(|a| a.downstream_selector.downstream_from_channel_id(id))
                         .unwrap()
                         .unwrap();
+
                     let message = MiningDeviceMessages::Mining(job);
+
                     DownstreamMiningNode::send(downstream, message.try_into().unwrap())
                         .await
                         .unwrap();
                 }
+
                 IS_NEW_TEMPLATE_HANDLED.store(true, std::sync::atomic::Ordering::SeqCst);
             }
         });
@@ -355,13 +382,23 @@ impl UpstreamMiningNode {
 
     pub fn start_receiving_new_prev_hash(self_mutex: Arc<Mutex<Self>>) {
         task::spawn(async move {
+            info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash]");
             Self::wait_for_channel_factory(self_mutex.clone()).await;
+            info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] AFTER WAITING FOR CHANNEL FACTORY");
             let prev_hash_reciver = self_mutex
                 .safe_lock(|a| a.recv_ph.clone())
                 .unwrap()
                 .unwrap();
+
+            info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] AFTER prev_hash_receiver: {:?}", &prev_hash_reciver);
+
             loop {
+                info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] BEFORE prev_hash_reciver.recv()");
                 let (message_prev_hash, token) = prev_hash_reciver.recv().await.unwrap();
+                info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] AFTER RECEIVING prev hash: {:?} and token: {:?}", &message_prev_hash, &token);
+
+                // TODO: This is what returns the PartialSetCustomMiningJob, find out why it is
+                // None.
                 let custom = self_mutex
                     .safe_lock(|a| {
                         a.channel_kind
@@ -369,14 +406,19 @@ impl UpstreamMiningNode {
                             .on_new_prev_hash_from_tp(&message_prev_hash)
                     })
                     .unwrap();
+
                 self_mutex
                     .safe_lock(|s| s.first_ph_received = true)
                     .unwrap();
 
+                // TODO: I think this must be Ok(None) for PartialSetCustomMiningJob, that's why in
+                // the "correct code" it never sends the msg upstream.
                 if let Ok(Some(custom_job)) = custom {
+                info!("@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] Before getting req_id");
                     let req_id = self_mutex
                         .safe_lock(|s| s.request_ids.safe_lock(|r| r.next()).unwrap())
                         .unwrap();
+
                     let custom_mining_job =
                         PoolMessages::Mining(Mining::SetCustomMiningJob(SetCustomMiningJob {
                             channel_id: self_mutex.safe_lock(|s| s.id).unwrap(),
@@ -396,6 +438,8 @@ impl UpstreamMiningNode {
                             future_job: false,
                             token,
                         }));
+
+                    info!("@@@@@@@@@@@@@@@@@@@@ [start_receiving_new_prev_hash] This is where we are sending the SetCustomMiningJob to upstream\n\n\n");
                     Self::send(self_mutex.clone(), custom_mining_job.try_into().unwrap())
                         .await
                         .unwrap();
@@ -450,13 +494,19 @@ impl UpstreamMiningNode {
                 Err(e) => Err(e.into()),
             },
             (None, _) => {
+                info!("!!!!!!!!!!!! DEBUG: before sending connection upstream?");
                 Self::connect(self_mutex.clone()).await?;
+
                 let mut connection = self_mutex
                     .safe_lock(|self_| self_.connection.clone())
                     .unwrap();
+
                 match connection.as_mut().unwrap().send(sv2_frame).await {
                     Ok(_) => match Self::setup_connection(self_mutex).await {
-                        Ok(()) => Ok(()),
+                        Ok(()) => {
+                            info!("!!!!!!!!!!!!!!!!! DEBUG: Sending setup connection msg was successful?");
+                            Ok(())
+                        },
                         Err(()) => panic!(),
                     },
                     Err(e) => {
@@ -476,6 +526,7 @@ impl UpstreamMiningNode {
         let mut connection = self_mutex
             .safe_lock(|self_| self_.connection.clone())
             .unwrap();
+
         match connection.as_mut() {
             Some(connection) => match connection.receiver.recv().await {
                 Ok(m) => Ok(m.try_into().unwrap()),
@@ -496,6 +547,7 @@ impl UpstreamMiningNode {
         let has_connection = self_mutex
             .safe_lock(|self_| self_.connection.is_some())
             .unwrap();
+
         match has_connection {
             true => Ok(()),
             false => {
@@ -529,6 +581,9 @@ impl UpstreamMiningNode {
     async fn setup_connection(self_mutex: Arc<Mutex<Self>>) -> Result<(), ()> {
         let sv2_connection = self_mutex.safe_lock(|self_| self_.sv2_connection).unwrap();
 
+        // TODO: THIS MUST BE SOME RIGHT? how does upstream get the setupconnection message?
+        info!("!!!!!!!!!!! DEBUG sending setup connection to upstream: is there a self._sv2_connection? {:?}", &sv2_connection);
+
         match sv2_connection {
             None => Ok(()),
             Some(sv2_connection) => {
@@ -537,6 +592,8 @@ impl UpstreamMiningNode {
                 let frame = self_mutex
                     .safe_lock(|self_| self_.new_setup_connection_frame(flags, version, version))
                     .unwrap();
+
+                info!("!!!!!!!!!!! DEBUG sending setup connection to upstream");
                 Self::send(self_mutex.clone(), frame)
                     .await
                     .map_err(|e| (error!("Failed to send {:?}", e)))?;
@@ -549,8 +606,10 @@ impl UpstreamMiningNode {
 
                 let message_type = response.get_header().unwrap().msg_type();
                 let payload = response.payload();
+
                 match (message_type, payload).try_into() {
                     Ok(CommonMessages::SetupConnectionSuccess(_)) => {
+                        info!("!!!!!!!!!!! DEBUG recevied setup connection success from upstream");
                         let receiver = self_mutex
                             .safe_lock(|self_| self_.connection.clone().unwrap().receiver)
                             .unwrap();
@@ -713,6 +772,7 @@ impl UpstreamMiningNode {
         let frame = self_mutex
             .safe_lock(|self_| self_.new_setup_connection_frame(flags, min_version, max_version))
             .unwrap();
+
         Self::send(self_mutex.clone(), frame).await?;
 
         let cloned = self_mutex.clone();
@@ -725,6 +785,7 @@ impl UpstreamMiningNode {
         let payload = response.payload();
         match (message_type, payload).try_into() {
             Ok(CommonMessages::SetupConnectionSuccess(m)) => {
+                info!("!!!!!!!!!!!!!! DEBUG RECEIVED SETUPCONNECTIONSUCCESS");
                 let receiver = self_mutex
                     .safe_lock(|self_| {
                         self_.sv2_connection = Some(Sv2MiningConnection {
@@ -735,11 +796,13 @@ impl UpstreamMiningNode {
                         self_.connection.clone().unwrap().receiver
                     })
                     .unwrap();
+
                 Self::relay_incoming_messages(self_mutex.clone(), receiver);
                 if self_mutex
                     .safe_lock(|s| s.channel_kind.is_extended())
                     .unwrap()
                 {
+                    info!("!!!!!!!!!!! DEBUG: Before sending open_extended_channel");
                     Self::open_extended_channel(self_mutex.clone()).await
                 }
                 Ok(())
@@ -781,6 +844,8 @@ impl UpstreamMiningNode {
                 min_extranonce_size: crate::MIN_EXTRANONCE_SIZE,
             },
         ));
+
+        info!("\n!!!!!!!!!!!!! DEBUG sending open extended channel message\n");
         #[allow(unused_must_use)]
         Self::send(self_mutex.clone(), message.try_into().unwrap())
             .await
@@ -1055,6 +1120,7 @@ impl
         &mut self,
         m: OpenExtendedMiningChannelSuccess,
     ) -> Result<SendTo<DownstreamMiningNode>, Error> {
+        info!("!!!!!!!!!!!!!!!! DEBUG: open extended mining channel success");
         let extranonce_prefix: Extranonce = m.extranonce_prefix.clone().try_into().unwrap();
         let range_0 = 0..m.extranonce_prefix.clone().to_vec().len();
         let range_1 = range_0.end..(range_0.end + EXTRANONCE_RANGE_1_LENGTH);
@@ -1072,6 +1138,8 @@ impl
             m.extranonce_size as u16
         };
 
+
+        info!("!!!!!!!!!!!!!!!! DEBUG: Creating a new channel via the channel factory, using channel_id from OpenStandardMiningChannelSuccess: {}", m.channel_id);
         self.channel_kind.initialize_factory(
             self.group_id.clone(),
             extranonces,
@@ -1080,6 +1148,7 @@ impl
             len,
             m.channel_id,
         );
+
         Ok(SendTo::None(None))
     }
 

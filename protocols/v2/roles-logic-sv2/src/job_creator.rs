@@ -16,7 +16,7 @@ pub use bitcoin::{
 use mining_sv2::NewExtendedMiningJob;
 use std::{collections::HashMap, convert::TryInto};
 use template_distribution_sv2::{NewTemplate, SetNewPrevHash};
-use tracing::debug;
+use tracing::{info, debug};
 
 #[derive(Debug)]
 pub struct JobsCreators {
@@ -75,8 +75,13 @@ impl JobsCreators {
         // This is to make sure that 0 is never used, so we can use 0 for
         // set_new_prev_hashes that do not refer to any future job/template if needed
         // Then we will do the inverse (-1) where needed
+        info!("CCDLE12 DEBUG: [job_creator.rs] template_id: {}", template.template_id);
         let template_id = template.template_id + 1;
+        info!("CCDLE12 DEBUG: [job_creator.rs] template_id AFTER INCREMENT: {}", template_id);
+
         self.lasts_new_template.push(template.as_static());
+        info!("CCDLE12 DEBUG: [job_creator.rs] lasts_new_templates: {:?}", &self.lasts_new_template);
+
         let next_job_id = self.ids.next();
         self.job_to_template_id.insert(next_job_id, template_id);
         self.templte_to_job_id.insert(template_id, next_job_id);
@@ -101,14 +106,18 @@ impl JobsCreators {
     /// we clear all the saved templates.
     pub fn on_new_prev_hash(&mut self, prev_hash: &SetNewPrevHash<'static>) -> Option<u32> {
         self.last_target = prev_hash.target.clone().into();
+
+        info!("DEBUG: Templates in lasts new template: {:?}", &self.lasts_new_template);
         let template: Vec<NewTemplate<'static>> = self
             .lasts_new_template
             .clone()
             .into_iter()
             .filter(|a| a.template_id == prev_hash.template_id)
             .collect();
+
         match template.len() {
             0 => {
+                info!("NO NEW TEMPLATES FOUND FOR THE JOB ID FROM SET NEW PREV HASH: {}", prev_hash.template_id);
                 self.reset_new_templates(None);
                 None
             }
@@ -120,7 +129,10 @@ impl JobsCreators {
                     .copied()
             }
             // TODO how many templates can we have at max
-            _ => todo!("{:#?}", template.len()),
+            _ => {
+                info!("FOUND MORE THAN 1 NEW  TEMPLATES FOUND FOR THE JOB ID FROM SET NEW PREV HASH: {}", prev_hash.template_id);
+                todo!("{:#?}", template.len());
+            },
         }
     }
 

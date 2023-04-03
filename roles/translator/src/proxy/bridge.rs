@@ -200,12 +200,12 @@ impl Bridge {
     ) {
         task::spawn(async move {
             debug!("Bridge waiting to receive first prev hash and first pool outputs");
-            while !self_mutex
-                .safe_lock(|s| (s.first_ph_received && s.pool_output_is_set))
-                .unwrap()
-            {
-                tokio::task::yield_now().await;
-            }
+            // while !self_mutex
+                // .safe_lock(|s| (s.first_ph_received && s.pool_output_is_set))
+                // .unwrap()
+            // {
+                // tokio::task::yield_now().await;
+            // }
             debug!("Bridge received first prev hash and first pool outputs");
             let tx_status = self_mutex.safe_lock(|s| s.tx_status.clone()).unwrap();
             loop {
@@ -279,11 +279,13 @@ impl Bridge {
             loop {
                 let (message_prev_hash, token) = prev_hash_reciver.recv().await.unwrap();
                 let custom = self_mutex
+
                     .safe_lock(|a| {
                         a.channel_factory
                             .on_new_prev_hash_from_tp(&message_prev_hash)
                     })
                     .unwrap();
+
                 self_mutex
                     .safe_lock(|s| s.first_ph_received = true)
                     .unwrap();

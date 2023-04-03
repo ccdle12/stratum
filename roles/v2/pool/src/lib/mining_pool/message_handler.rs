@@ -64,6 +64,7 @@ impl ParseDownstreamMiningMessages<(), NullDownstreamMiningSelector, NoRouting> 
         &mut self,
         m: OpenExtendedMiningChannel,
     ) -> Result<SendTo<()>, Error> {
+        info!("HERE");
         let request_id = m.request_id;
         let hash_rate = m.nominal_hash_rate;
         let min_extranonce_size = m.min_extranonce_size;
@@ -71,6 +72,7 @@ impl ParseDownstreamMiningMessages<(), NullDownstreamMiningSelector, NoRouting> 
             .channel_factory
             .safe_lock(|s| s.new_extended_channel(request_id, hash_rate, min_extranonce_size))
             .map_err(|e| roles_logic_sv2::Error::PoisonLock(e.to_string()))?;
+
         match messages_res {
             Some(messages) => {
                 let messages = messages.into_iter().map(SendTo::Respond).collect();

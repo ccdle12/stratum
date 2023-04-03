@@ -55,13 +55,17 @@ static MIN_EXTRANONCE_SIZE: u16 = 6;
 static EXTRANONCE_RANGE_1_LENGTH: usize = 4;
 
 async fn initialize_upstreams(min_version: u16, max_version: u16) {
+info!("!!!!!!!!!!!!!!!!!!!!! DEBUG INITIALIZING UPSTREAM\n\n");
     let upstreams = ROUTING_LOGIC
         .get()
         .expect("BUG: ROUTING_LOGIC has not been set yet")
         .safe_lock(|r_logic| r_logic.upstream_selector.upstreams.clone())
         .unwrap();
+
     let available_upstreams =
         crate::lib::upstream_mining::scan(upstreams, min_version, max_version).await;
+
+info!("!!!!!!!!!!!!!!!!!!!!! DEBUG INITIALIZING UPSTREAM - available upsreams: {:?}\n\n", &available_upstreams);
     ROUTING_LOGIC
         .get()
         .unwrap()

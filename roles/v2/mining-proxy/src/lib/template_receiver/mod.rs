@@ -21,6 +21,7 @@ use tokio::net::TcpStream;
 mod message_handler;
 mod setup_connection;
 use setup_connection::SetupConnectionHandler;
+use tracing::info;
 
 pub struct TemplateRx {
     receiver: Receiver<EitherFrame>,
@@ -91,6 +92,7 @@ impl TemplateRx {
                     .clone()
                     .safe_lock(|s| s.receiver.clone())
                     .unwrap();
+
                 let mut frame: StdFrame = receiver.recv().await.unwrap().try_into().unwrap();
                 let message_type = frame.get_header().unwrap().msg_type();
                 let payload = frame.payload();
@@ -101,25 +103,39 @@ impl TemplateRx {
                         message_type,
                         payload,
                     );
+                info!("LASTEST: @@@@@@@@@@@@@@@@@@!!! [start_templates] next message to send: {:?}", &next_message_to_send);
+
                 match next_message_to_send {
                     Ok(SendTo::None(m)) => match m {
                         Some(TemplateDistribution::NewTemplate(m)) => {
+                            info!("LASTEST: @@@@@@@@@@@!!! [template_receiver] Processing NewTemplate");
                             super::upstream_mining::IS_NEW_TEMPLATE_HANDLED
                                 .store(false, std::sync::atomic::Ordering::SeqCst);
+
                             let sender = self_mutex
                                 .safe_lock(|s| s.send_new_tp_to_negotiator.clone())
                                 .unwrap();
+
+                            info!("LASTEST: @@@@@@@@@@@!!! Sending new to template to negotiator: {:?}", &m);
                             sender.send((m, token)).await.unwrap();
                         }
                         Some(TemplateDistribution::SetNewPrevHash(m)) => {
                             while !super::upstream_mining::IS_NEW_TEMPLATE_HANDLED
                                 .load(std::sync::atomic::Ordering::SeqCst)
                             {
+                                // TODO: 20203.04.03 - This is the main culprit for the bug. The TP
+                                // sends the correct order of messages after receiving the
+                                // COINBASE_OUTPUT_DATA_SIZE msg by sending: NewTemplate ->
+                                // SetNewPrevHash
+                                info!("HERE: @@@@@@@@@@@!!! I guess yielding because IS_NEW_TEMPLATE_HANDLED is false???: {:?}", &super::upstream_mining::IS_NEW_TEMPLATE_HANDLED);
                                 tokio::task::yield_now().await;
                             }
+
                             let sender = self_mutex
                                 .safe_lock(|s| s.send_new_ph_to_negotiator.clone())
                                 .unwrap();
+
+                            info!("LASTEST: @@@@@@@@@@@!!! Sending new to set new prevhash to negotiator: {:?}", &m);
                             sender.send((m, token)).await.unwrap();
                         }
                         _ => todo!(),

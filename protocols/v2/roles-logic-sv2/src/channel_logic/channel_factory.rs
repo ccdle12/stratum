@@ -21,7 +21,7 @@ use bitcoin::{
     hashes::{sha256d::Hash, Hash as Hash_},
     TxOut,
 };
-use tracing::error;
+use tracing::{error, info};
 
 /// A stripped type of `SetCustomMiningJob` without the (`channel_id, `request_id` and `token`) fields
 pub struct PartialSetCustomMiningJob {
@@ -235,6 +235,7 @@ impl ChannelFactory {
         hash_rate: f32,
         min_extranonce_size: u16,
     ) -> Option<Vec<Mining<'static>>> {
+        info!("\n\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! THIS IS WHERE THE CHANNEL ID IS SET FOR NEWEXTENDEDMININGCHANNEL\n\n\n");
         let extended_channels_group = 0;
         let max_extranonce_size = self.extranonces.get_range2_len() as u16;
         if min_extranonce_size <= max_extranonce_size {
@@ -246,10 +247,13 @@ impl ChannelFactory {
                 .safe_lock(|ids| ids.new_channel_id(extended_channels_group))
                 .unwrap();
             self.channel_to_group_id.insert(channel_id, 0);
+
+
             let target = crate::utils::hash_rate_to_target(hash_rate, self.share_per_min);
             let extranonce = self
                 .extranonces
                 .next_extended(max_extranonce_size as usize)?;
+
             let extranonce_prefix = extranonce.into_prefix(self.extranonces.get_prefix_len())?;
             let success = OpenExtendedMiningChannelSuccess {
                 request_id,
@@ -258,18 +262,24 @@ impl ChannelFactory {
                 extranonce_size: max_extranonce_size,
                 extranonce_prefix,
             };
+
             self.extended_channels.insert(channel_id, success.clone());
             let mut result = vec![Mining::OpenExtendedMiningChannelSuccess(success)];
+
+            info!("LAST VALID JOB: {:?}", &self.last_valid_job);
             if let Some((job, _)) = &self.last_valid_job {
+
                 let mut job = job.clone();
                 job.future_job = true;
                 let j_id = job.job_id;
+                info!("!!!!!!!!!!!!!DEBUG: channel_id used in new_extended channel and using last_valid_job: {}", j_id);
                 result.push(Mining::NewExtendedMiningJob(job));
                 if let Some((new_prev_hash, _)) = &self.last_prev_hash {
                     let mut new_prev_hash = new_prev_hash.into_set_p_hash(channel_id, None);
                     new_prev_hash.job_id = j_id;
                     result.push(Mining::SetNewPrevHash(new_prev_hash.clone()))
                 };
+
             } else if let Some((new_prev_hash, _)) = &self.last_prev_hash {
                 let new_prev_hash = new_prev_hash.into_set_p_hash(channel_id, None);
                 result.push(Mining::SetNewPrevHash(new_prev_hash.clone()))
@@ -381,8 +391,7 @@ impl ChannelFactory {
         let standard_channel = self
             .standard_channels_for_hom_downstreams
             .get(&channel_id)
-            .unwrap();
-        // OPTIMIZATION this could be memoized somewhere cause is very likely that we will receive a lot od
+            .unwrap(); // OPTIMIZATION this could be memoized somewhere cause is very likely that we will receive a lot od
         // OpenStandardMiningChannel requests consequtevely
         let job_id = self.job_ids.next();
         let future_jobs: Option<Vec<NewMiningJob<'static>>> = self
@@ -412,6 +421,7 @@ impl ChannelFactory {
             None => None,
         };
 
+        info!("\n\n!!!!!!!!!!!!!!!!DEBUG: [channel_factory] prepare_standard_jobs_and_p_hash() last prev hash is some: {:?}, last valid job is {:?}, future jobs are not empty: {:?}\n\n", &self.last_prev_hash, &last_valid_job, &self.future_jobs);
         // This is the same thing of just check if there is a prev hash add it to result. If there
         // is last_job add it to result and add each future job to result.
         // But using the pattern match is more clear how each option is handled
@@ -480,7 +490,13 @@ impl ChannelFactory {
             (None, Some(_), false) => unreachable!(),
             // This can not happen because as soon as a prev hash is received we flush the future
             // jobs
-            (Some(_), None, false) => unreachable!(),
+            (Some(_), None, false) => {
+                // TODO: So we have an issue here:
+                // - 1. last prev hash is some
+                // - 2. last valid job is None
+                info!("\n\n!!!!!!!!!!!!!!!!DEBUG: [channel_factory] prepare_standard_jobs_and_p_hash() last prev hash is some: {:?}, last valid job is None, future jobs are not empty: {:?}\n\n", &self.last_prev_hash, &self.future_jobs);
+                unreachable!();
+            },
         }
     }
 
@@ -582,6 +598,7 @@ impl ChannelFactory {
             if job.0.job_id == m.job_id {
                 job.0.future_job = false;
                 self.last_valid_job = Some(job);
+                info!("DEBUG: [on_new_prev_hash] assigning job to last_valid_job: {:?}", &self.last_valid_job);
                 break;
             }
             self.last_valid_job = None;
@@ -595,6 +612,8 @@ impl ChannelFactory {
                 ids.push(group_id)
             }
         }
+
+        info!("\n\n!!!!!!!!!!!!!! DEBUG: Received set new prev hash and updated last_prev_hash with StagedPhash: {:?}", &m);
         self.last_prev_hash = Some((m, ids));
         Ok(())
     }
@@ -604,10 +623,15 @@ impl ChannelFactory {
         &mut self,
         m: NewExtendedMiningJob<'static>,
     ) -> Result<HashMap<u32, Mining<'static>>, Error> {
+        info!("@@@@@@@@@@@@@@@@@@@@!!!!!!!!!!!!!!!!! DEBUG: channel_factory.rs [on_new_extended_mining_job] m is: {:?} and last prev hash: {:?}", m, &self.last_prev_hash);
+
         match (m.future_job, &self.last_prev_hash) {
             (true, _) => {
                 let mut result = HashMap::new();
+
                 self.prepare_jobs_for_downstream_on_new_extended(&mut result, &m)?;
+                info!("!!!!!!!!!!!!!!!!! DEBUG: channel_factory.rs [on_new_extended_mining_job] HashMap after calling prepare_jobs_for_downstream_on_new_extended: {:?}", &result);
+
                 let mut ids = vec![];
                 for complete_id in self.standard_channels_for_non_hom_downstreams.keys() {
                     let group_id = GroupId::into_group_id(*complete_id);
@@ -615,7 +639,11 @@ impl ChannelFactory {
                         ids.push(group_id)
                     }
                 }
+
+                // TODO: I think it's here adding the NewExtendedMiningJob with the channel id of
+                // 0, when it should be 1.
                 self.future_jobs.push((m, ids));
+
                 Ok(result)
             }
             (false, Some(_)) => {
@@ -662,6 +690,7 @@ impl ChannelFactory {
             let standard_job = Mining::NewMiningJob(standard_job);
             result.insert(*id, standard_job);
         }
+
         for id in self.standard_channels_for_non_hom_downstreams.keys() {
             let group_id = GroupId::into_group_id(*id);
             let mut extended = m.clone();
@@ -948,7 +977,10 @@ impl PoolChannelFactory {
         &mut self,
         m: &SetNewPrevHashFromTp<'static>,
     ) -> Result<u32, Error> {
+        info!("!!!!!!!!!!1 DEBUG: [on_new_prev_hash_from_tp] received SetNewPrevHashFromTp message {:?}\n", &m);
         let job_id = self.job_creator.on_new_prev_hash(m).unwrap_or(0);
+        info!("!!!!!!!!!!1 DEBUG: [on_new_prev_hash_from_tp] job id generated by SetNewPrevHash {}\n", job_id);
+
         let new_prev_hash = StagedPhash {
             job_id,
             prev_hash: m.prev_hash.clone(),
@@ -968,9 +1000,13 @@ impl PoolChannelFactory {
             last_pool_coinbase_output.value = m.coinbase_tx_value_remaining;
         }
 
+        // TODO: This is where the NewTemplate is getting transformed and a channel_id is assigned
         let new_job =
             self.job_creator
                 .on_new_template(m, true, self.pool_coinbase_outputs.clone())?;
+
+        info!("!!!!!!!!!!!!DEBUG [channel_factory.rs on_new_template()]: new_job: {:?}", &new_job);
+
         self.inner.on_new_extended_mining_job(new_job)
     }
     /// Called when a `SubmitSharesStandard` message is received from the downstream. We check the shares
@@ -1169,15 +1205,28 @@ impl ProxyExtendedChannelFactory {
         m: &SetNewPrevHashFromTp<'static>,
     ) -> Result<Option<PartialSetCustomMiningJob>, Error> {
         if let Some(job_creator) = self.job_creator.as_mut() {
+
+            info!("@@@@@@@@@@@@@@@@@@@@@@@@ [on_new_prev_hash_from_tp] BEFORE job_creator.on_new_prev_hash(SetNewPrevHashFromTp)");
+            // TODO: Clear all previous templates cached and keep the one that matches this jobid
             let job_id = job_creator.on_new_prev_hash(m).unwrap_or(0);
+            info!("@@@@@@@@@@@@@@@@@@@@@@@@ [on_new_prev_hash_from_tp] job_id after on_new_prev_hash: {}", job_id);
+
             let new_prev_hash = StagedPhash {
                 job_id,
                 prev_hash: m.prev_hash.clone(),
                 min_ntime: m.header_timestamp,
                 nbits: m.n_bits,
             };
+
+            // TODO: So look up the id in the future templates. if its not
+            // there then dont create the custom job?
+            // What ensures that there is something there in the future templates?
             let mut custom_job = None;
+
+            // TODO: inner is a ChannelFactory
             if let Some(template) = self.inner.future_templates.get(&job_id) {
+                info!("!!!!!!!!!!!! DEBUG Found future_template with job)_id: {}", job_id);
+
                 custom_job = Some(PartialSetCustomMiningJob {
                     version: template.version,
                     prev_hash: new_prev_hash.prev_hash.clone(),
@@ -1194,6 +1243,7 @@ impl ProxyExtendedChannelFactory {
                     future_job: template.future_template,
                 });
             }
+
             self.inner.future_templates = HashMap::new();
             self.inner.on_new_prev_hash(new_prev_hash)?;
             Ok(custom_job)
@@ -1213,11 +1263,15 @@ impl ProxyExtendedChannelFactory {
         ),
         Error,
     > {
+        info!("CCDLE12: [channel_factory] on_new_template()");
+
         if let (Some(job_creator), Some(pool_coinbase_outputs)) = (
             self.job_creator.as_mut(),
             self.pool_coinbase_outputs.as_ref(),
         ) {
+            info!("CCDLE12: [channel_factory] on_new_template() - job_create and pool_coinbase_outputs was some");
             let new_job = job_creator.on_new_template(m, true, pool_coinbase_outputs.clone())?;
+
             if !new_job.future_job && self.inner.last_prev_hash.is_some() {
                 let prev_hash = self.last_prev_hash().unwrap();
                 let min_ntime = self.last_min_ntime().unwrap();
@@ -1238,6 +1292,7 @@ impl ProxyExtendedChannelFactory {
                     extranonce_size,
                     future_job: m.future_template,
                 };
+
                 return Ok((
                     self.inner.on_new_extended_mining_job(new_job)?,
                     Some(custom_mining_job),

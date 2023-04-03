@@ -15,6 +15,7 @@ use mining_sv2::{
     Target,
 };
 use std::{collections::HashMap, convert::TryInto, sync::Arc};
+use tracing::{debug, error, info};
 
 /// Used to convert an extended mining job to a standard mining job. The `extranonce` field must
 /// be exactly 32 bytes.
@@ -153,6 +154,7 @@ impl GroupChannelJobDispatcher {
                 .or_insert_with(HashMap::new);
         }
 
+        info!("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
         // Is fine to unwrap a safe_lock result
         let standard_job_id = self.ids.safe_lock(|ids| ids.next()).unwrap();
 

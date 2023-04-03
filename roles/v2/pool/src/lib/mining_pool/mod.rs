@@ -305,6 +305,7 @@ impl Pool {
             .map_err(|e| PoolError::PoisonLock(e.to_string()))?;
         while let Ok(new_prev_hash) = rx.recv().await {
             debug!("New prev hash received: {:?}", new_prev_hash);
+
             let res = self_
                 .safe_lock(|s| {
                     s.last_prev_hash_template_id = new_prev_hash.template_id;
@@ -326,6 +327,7 @@ impl Pool {
                     let downstreams = self_
                         .safe_lock(|s| s.downstreams.clone())
                         .map_err(|e| PoolError::PoisonLock(e.to_string()));
+
                     let downstreams = handle_result!(status_tx, downstreams);
 
                     for (channel_id, downtream) in downstreams {
@@ -348,6 +350,7 @@ impl Pool {
                 Err(_) => todo!(),
             }
         }
+
         Ok(())
     }
 
@@ -367,6 +370,9 @@ impl Pool {
             let messages = channel_factory
                 .safe_lock(|cf| cf.on_new_template(&mut new_template))
                 .map_err(|e| PoolError::PoisonLock(e.to_string()));
+
+            debug!("!!!!!!!!!!!!!!!!!!! [on_new_template] messages after calling on_new_template: {:?}", &messages);
+
             let messages = handle_result!(status_tx, messages);
             let mut messages = handle_result!(status_tx, messages);
 
@@ -376,6 +382,7 @@ impl Pool {
             let downstreams = handle_result!(status_tx, downstreams);
 
             for (channel_id, downtream) in downstreams {
+                debug!("!!!!!!!!!!!!!!!!!!! [on_new_template] GOING THROUGH ALL DOWNSTREAMS");
                 if let Some(to_send) = messages.remove(&channel_id) {
                     if let Err(e) =
                         Downstream::match_send_to(downtream.clone(), Ok(SendTo::Respond(to_send)))
@@ -392,6 +399,7 @@ impl Pool {
 
             handle_result!(status_tx, sender_message_received_signal.send(()).await);
         }
+
         Ok(())
     }
 
