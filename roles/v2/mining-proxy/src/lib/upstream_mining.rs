@@ -296,9 +296,9 @@ impl UpstreamMiningNode {
                 .safe_lock(|a| a.recv_tp.clone())
                 .unwrap()
                 .unwrap();
-            while !self_mutex.safe_lock(|s| s.first_ph_received).unwrap() {
-                tokio::task::yield_now().await;
-            }
+            // while !self_mutex.safe_lock(|s| s.first_ph_received).unwrap() {
+                // tokio::task::yield_now().await;
+            // }
             loop {
                 let (mut message_new_template, token): (NewTemplate, Vec<u8>) =
                     new_template_reciver.recv().await.unwrap();
